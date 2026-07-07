@@ -1,0 +1,5 @@
+metric,mean,std
+ACC,78.3,4.3
+SEN,60.6,18.0
+SPE,87.5,8.7
+AUC,85.3,2.5

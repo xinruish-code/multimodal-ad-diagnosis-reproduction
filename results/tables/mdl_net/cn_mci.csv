@@ -1,0 +1,6 @@
+metric,mean,std
+ACC,66.4,3.4
+SEN,44.4,22.1
+SPE,83.9,16.8
+AUC,75.0,3.4
+note,9/10 folds completed due to HPC 48-hour time limit,

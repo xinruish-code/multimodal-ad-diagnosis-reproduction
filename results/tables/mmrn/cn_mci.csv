@@ -1,0 +1,6 @@
+metric,mean,std
+ACC,59.0,
+SEN,53.6,
+SPE,63.6,
+AUC,63.6,
+note,Single 80/20 split,

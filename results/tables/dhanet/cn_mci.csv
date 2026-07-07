@@ -1,0 +1,8 @@
+metric,mean,std
+ACC,55.7,3.3
+SEN,8.4,16.8
+SPE,95.9,8.1
+AUC,64.0,2.8
+F1,10.1,20.3
+PRE,12.7,25.5
+note,Very low SEN — model defaults to CN,
