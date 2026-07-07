@@ -56,12 +56,15 @@ model:
 training:
   epochs: 40
   cross_validation: 10
-  batch_size: TODO
-  optimizer: TODO
-  learning_rate: TODO
-  weight_decay: TODO
-  loss_function: TODO
-  random_seed: TODO
+  batch_size: 4          # 论文原始为16，受限于P100 16GB显存调整为4
+  optimizer: Adam
+  learning_rate: 0.001
+  weight_decay: 0.001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.2
+  random_seed: 42
+  warmup_epochs: 10
+  input_shape: [96, 112, 96]
 
 evaluation:
   metrics:
