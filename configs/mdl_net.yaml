@@ -1,0 +1,100 @@
+# Configuration for MDL-Net reproduction
+
+project:
+  name: multimodal-ad-diagnosis-reproduction
+  model: MDL-Net
+  status: reproduced
+
+paper:
+  title: "3D Multimodal Fusion Network With Disease-Induced Joint Learning for Early Alzheimer's Disease Diagnosis"
+  task: "Early Alzheimer's disease diagnosis"
+  modality:
+    - sMRI
+    - PET
+
+dataset:
+  name: ADNI
+  data_root: "/path/to/adni/data"
+  csv_root: "/path/to/csv/files"
+  note: "Raw medical imaging data are not included in this repository."
+
+tasks:
+  - name: AD_vs_CN
+    num_classes: 2
+    positive_class: AD
+    negative_class: CN
+
+  - name: AD_vs_MCI
+    num_classes: 2
+    positive_class: AD
+    negative_class: MCI
+
+  - name: MCI_vs_CN
+    num_classes: 2
+    positive_class: MCI
+    negative_class: CN
+
+input:
+  image_type: 3D
+  modalities:
+    - gray_matter_sMRI
+    - white_matter_sMRI
+    - PET
+  roi_atlas: AAL
+  num_rois: 90
+
+model:
+  backbone: 3DResNet18
+  fusion_strategy: multimodal_joint_learning
+  modules:
+    - self_adaptive_transformer
+    - local_aware_learning
+    - latent_space_learning
+    - disease_induced_region_learning
+    - GRU_based_ROI_weighting
+
+training:
+  epochs: 40
+  cross_validation: 10
+  batch_size: TODO
+  optimizer: TODO
+  learning_rate: TODO
+  weight_decay: TODO
+  loss_function: TODO
+  random_seed: TODO
+
+evaluation:
+  metrics:
+    - accuracy
+    - sensitivity
+    - specificity
+    - auc
+    - f1_score
+    - precision
+
+results:
+  AD_vs_CN:
+    accuracy: 88.5
+    sensitivity: 77.6
+    specificity: 93.3
+    auc: 96.1
+
+  AD_vs_MCI:
+    accuracy: 78.3
+    sensitivity: 60.6
+    specificity: 87.5
+    auc: 85.3
+
+  MCI_vs_CN:
+    accuracy: 66.4
+    sensitivity: 44.4
+    specificity: 83.9
+    auc: 75.0
+    note: "9/10 folds completed due to HPC time limit."
+
+notes:
+  reproduction_challenges:
+    - "MRI and PET preprocessing require careful alignment."
+    - "Some subjects may have missing modalities."
+    - "Training 3D multimodal models is computationally expensive."
+    - "MCI-related classification is more difficult than AD vs CN."
