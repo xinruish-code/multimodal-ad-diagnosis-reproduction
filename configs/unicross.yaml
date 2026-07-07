@@ -1,0 +1,72 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# UniCross Configuration
+# Paper: "UniCross: Balanced Multimodal Learning for Alzheimer's Disease
+#         Diagnosis by Uni-modal Separation and Metadata-Guided
+#         Cross-Modal Interaction"
+# ─────────────────────────────────────────────────────────────────────────────
+
+model:
+  name: UniCross
+  modules:
+    - UniModalEncoder              # uni-modal separation encoder
+    - CrossModalInteraction        # metadata-guided cross-modal interaction
+  patch_size: 8
+  embed_dim: 128
+  heads: 4                         # attention heads
+  depth: 2                         # transformer depth
+  dropout: 0.0
+  temperature: 0.07                # contrastive learning temperature
+  num_classes: 2
+
+data:
+  modalities: [mwp1, pet]          # sMRI + PET
+  mri_folder: mwp1
+  pet_folder: pet
+  meta_columns: [Age, Sex, "MMSE Total Score"]
+  input_shape: [64, 80, 64]        # D x H x W
+  csv_label_col: Label
+  tasks:
+    - AD_CN
+    - AD_MCI
+    - MCI_CN
+
+training:
+  encoder_epochs: 40               # uni-modal pre-training phase
+  fusion_epochs: 10                # cross-modal fine-tuning phase
+  cross_validation: 5              # 5-fold stratified CV
+  batch_size: 2
+  optimizer: Adam
+  encoder_lr: 5.0e-4
+  fusion_lr: 1.0e-3
+  weight_decay: 1.0e-5
+  loss_function: CrossEntropyLoss + MWCL contrastive loss
+  mwcl_weight: 1.0
+  random_seed: 42
+  num_workers: 0
+  device: cuda
+
+results:
+  AD_CN:
+    ACC: null
+    SEN: null
+    SPE: null
+    AUC: null
+    folds_completed: pending
+  AD_MCI:
+    ACC: null
+    SEN: null
+    SPE: null
+    AUC: null
+    folds_completed: pending
+  MCI_CN:
+    ACC: null
+    SEN: null
+    SPE: null
+    AUC: null
+    folds_completed: pending
+  note: "Results pending — job currently running on CARC (job IDs: 10001333, 10001334, 10001335)"
+
+environment:
+  cluster: USC CARC (Discovery)
+  gpu: Tesla P100-PCIE-16GB
+  code_path: /scratch1/xinruish/data_AD/UniCross-reproduce/
