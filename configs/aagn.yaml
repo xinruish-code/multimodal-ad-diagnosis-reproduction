@@ -1,0 +1,73 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# AAGN Configuration
+# Paper: "Anatomy-Aware Gating Network for Explainable
+#         Alzheimer's Disease Diagnosis"
+# ─────────────────────────────────────────────────────────────────────────────
+
+model:
+  name: AAGN
+  backbone: CNN3D
+  modules:
+    - AnatomyAwareSE               # Anatomy-Aware Squeeze-and-Excite
+    - AnatomyGating                # Gumbel-Softmax ROI gating
+  channels: 32
+  blocks: 4
+  embed_dim: 128
+  tau: 1.0                         # Gumbel-Softmax temperature
+  hard_gate: false                 # soft gating during training
+  roi_grid: [4, 4, 4]              # grid ROIs when no atlas provided
+  atlas_path: null                 # optional AAL atlas NIfTI
+  num_classes: 2
+
+data:
+  modalities: [mwp1]               # sMRI only
+  image_folder: mwp1
+  input_shape: [64, 80, 64]        # D x H x W
+  csv_label_col: Label
+  tasks:
+    - AD_CN
+    - AD_MCI
+    - MCI_CN
+
+training:
+  epochs: 50
+  cross_validation: 5              # 5-fold stratified CV
+  batch_size: 4
+  optimizer: Adam
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  loss_function: CrossEntropyLoss
+  random_seed: 42
+  num_workers: 0
+  device: cuda
+
+results:
+  AD_CN:
+    ACC: 87.1
+    SEN: 74.5
+    SPE: 92.7
+    AUC: 93.4
+    F1:  78.1
+    PRE: 82.2
+    folds_completed: 5
+  AD_MCI:
+    ACC: 76.0
+    SEN: 49.8
+    SPE: 89.7
+    AUC: 81.5
+    F1:  58.8
+    PRE: 72.7
+    folds_completed: 5
+  MCI_CN:
+    ACC: 63.5
+    SEN: 58.8
+    SPE: 67.5
+    AUC: 68.2
+    F1:  59.3
+    PRE: 64.2
+    folds_completed: 5
+
+environment:
+  cluster: USC CARC (Discovery)
+  gpu: Tesla P100-PCIE-16GB
+  code_path: /scratch1/xinruish/data_AD/AAGN-reproduce/
