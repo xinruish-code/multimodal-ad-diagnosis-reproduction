@@ -1,0 +1,160 @@
+# Configuration for LA-GMF reproduction
+# This config summarizes the reproduction settings for LA-GMF.
+# Raw medical imaging data and local server paths are not included in this repository.
+
+project:
+  name: multimodal-ad-diagnosis-reproduction
+  model: LA-GMF
+  status: reproduced
+
+paper:
+  title: "Interpretable Medical Deep Framework by Logits-Constraint Attention Guiding Graph-Based Multi-Scale Fusion for Alzheimer's Disease Analysis"
+  task: "Interpretable Alzheimer's disease diagnosis"
+  modality:
+    - sMRI
+
+dataset:
+  name: ADNI
+  data_root: "/path/to/adni/data"
+  csv_root: "/path/to/csv/files"
+  note: "Raw medical imaging data are not included in this repository."
+
+tasks:
+  - name: AD_CN
+    display_name: AD_vs_CN
+    num_classes: 2
+    positive_class: AD
+    negative_class: CN
+
+  - name: AD_MCI
+    display_name: AD_vs_MCI
+    num_classes: 2
+    positive_class: AD
+    negative_class: MCI
+
+  - name: MCI_CN
+    display_name: MCI_vs_CN
+    num_classes: 2
+    positive_class: MCI
+    negative_class: CN
+
+input:
+  image_type: 3D
+  modalities:
+    - gray_matter_sMRI
+  tissue_map: GM
+  source_folder: mwp1
+  input_shape: [64, 80, 64]
+
+model:
+  backbone: 3D_ResNet
+  fusion_strategy: graph_based_multi_scale_fusion
+  modules:
+    - multi_scale_feature_extraction
+    - graph_based_multi_scale_fusion
+    - logits_constraint_attention
+    - binary_classification_head
+  topk: 16
+
+training:
+  epochs: 100
+  cross_validation: 5
+  batch_size: 3
+  optimizer: TODO
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  loss_function:
+    - BalancedCrossEntropy
+    - label_smoothing
+  label_smoothing: 0.1
+  random_seed: 42
+  device: cuda
+  num_workers: 4
+  output_dir: lagmf_runs
+
+evaluation:
+  metrics:
+    - accuracy
+    - sensitivity
+    - specificity
+    - auc
+    - f1_score
+    - precision
+
+results:
+  AD_CN:
+    display_name: AD_vs_CN
+    accuracy_mean: 93.08
+    accuracy_std: 1.36
+    sensitivity_mean: 95.80
+    sensitivity_std: 2.48
+    specificity_mean: 86.97
+    specificity_std: 4.14
+    auc_mean: 94.62
+    auc_std: 2.28
+    f1_mean: 95.03
+    f1_std: 1.01
+    precision_mean: 94.34
+    precision_std: 1.59
+    folds: 5
+
+  AD_MCI:
+    display_name: AD_vs_MCI
+    accuracy_mean: 80.00
+    accuracy_std: 3.90
+    sensitivity_mean: 85.34
+    sensitivity_std: 6.41
+    specificity_mean: 69.79
+    specificity_std: 12.48
+    auc_mean: 82.70
+    auc_std: 4.50
+    f1_mean: 84.80
+    f1_std: 3.03
+    precision_mean: 84.83
+    precision_std: 5.13
+    folds: 5
+
+  MCI_CN:
+    display_name: MCI_vs_CN
+    accuracy_mean: 67.11
+    accuracy_std: 2.10
+    sensitivity_mean: 56.31
+    sensitivity_std: 5.80
+    specificity_mean: 76.30
+    specificity_std: 5.38
+    auc_mean: 67.97
+    auc_std: 3.40
+    f1_mean: 61.02
+    f1_std: 3.24
+    precision_mean: 67.22
+    precision_std: 3.68
+    folds: 5
+
+notes:
+  verified_from_code:
+    - "train_lagmf.py defines default image folder as mwp1."
+    - "train_lagmf.py defines default input shape as [64, 80, 64]."
+    - "train_lagmf.py defines default epochs as 100."
+    - "train_lagmf.py defines default folds as 5."
+    - "train_lagmf.py defines default batch size as 3."
+    - "train_lagmf.py defines default learning rate as 0.001."
+    - "train_lagmf.py defines default weight decay as 0.0001."
+    - "train_lagmf.py defines default top-k value as 16."
+    - "train_lagmf.py defines default random seed as 42."
+    - "The submitted slurm scripts explicitly used --folds 5 for AD_CN, AD_MCI, and MCI_CN."
+    - "The output folders contain fold_00 to fold_04 for AD_CN, AD_MCI, and MCI_CN."
+
+  verified_from_report:
+    - "Input uses 3D sMRI gray matter tissue maps."
+    - "The source folder is mwp1."
+    - "The model uses graph-based multi-scale fusion."
+    - "The model uses logits-constraint attention."
+    - "The reported reproduction uses 100 epochs."
+    - "The reported metrics include accuracy, sensitivity, specificity, AUC, F1-score, and precision."
+
+  setting_note:
+    - "Although an earlier summary may mention 3-fold cross-validation, the actual training scripts and output folders indicate that the reproduced LA-GMF experiments used 5-fold cross-validation."
+    - "Local absolute data paths are intentionally replaced with placeholders for privacy and portability."
+
+  to_verify:
+    - "optimizer"
