@@ -216,3 +216,34 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Medical imaging data
+*.nii
+*.nii.gz
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# Data folders
+data/raw/
+data/processed/
+data/interim/
+data/external/
+
+# Model checkpoints
+checkpoints/
+*.pth
+*.pt
+*.ckpt
+
+# Logs and experiment tracking
+logs/
+runs/
+wandb/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# System files
+.DS_Store
