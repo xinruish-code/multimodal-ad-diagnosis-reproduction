@@ -1,0 +1,126 @@
+# Configuration for MMRN reproduction
+# Verified items are based on the reproduction report.
+# Some hyperparameters should be confirmed from the original code or training scripts.
+
+project:
+  name: multimodal-ad-diagnosis-reproduction
+  model: MMRN
+  status: reproduced
+
+paper:
+  title: "Multi-Template Meta-Information Regularized Network for Alzheimer's Disease Diagnosis Using Structural MRI"
+  task: "Alzheimer's disease diagnosis with meta-information disentanglement"
+  modality:
+    - sMRI
+
+dataset:
+  name: ADNI
+  data_root: "/path/to/adni/data"
+  csv_root: "/path/to/csv/files"
+  note: "Raw medical imaging data are not included in this repository."
+
+tasks:
+  - name: AD_vs_CN
+    num_classes: 2
+    positive_class: AD
+    negative_class: CN
+
+  - name: AD_vs_MCI
+    num_classes: 2
+    positive_class: AD
+    negative_class: MCI
+
+  - name: CN_vs_MCI
+    num_classes: 2
+    positive_class: MCI
+    negative_class: CN
+
+input:
+  image_type: 3D
+  modalities:
+    - sMRI
+  registration: affine
+  num_templates: 12
+  template_sampling: "two randomly selected templates per training sample"
+  metadata:
+    - age
+    - gender
+    - education
+
+model:
+  backbone: Siamese_encoder
+  encoder_layers: 8
+  shared_weights: true
+  modules:
+    - multi_template_self_supervised_learning
+    - weakly_supervised_meta_information_learning
+    - InfoGAN_meta_information_extraction
+    - mutual_information_minimization
+    - CLUB_estimator
+    - binary_classifier
+
+training:
+  epochs: 100
+  cross_validation: single 80/20 split
+  batch_size: 6
+  optimizer: Adam
+  learning_rate: 0.0001 (1e-4)
+  weight_decay: N/A (not specified)
+  loss_function: CrossEntropyLoss + SSL loss + WML loss + MIM (CLUB)
+  random_seed: 42
+  input_shape: [64, 80, 64]
+  meta_columns: Age, Sex, MMSE Total Score
+
+evaluation:
+  metrics:
+    - accuracy
+    - sensitivity
+    - specificity
+    - auc
+
+results:
+  AD_vs_CN:
+    accuracy: 88.5
+    sensitivity: 73.6
+    specificity: 95.1
+    auc: 94.4
+    split: single_80_20_split
+
+  AD_vs_MCI:
+    accuracy: 78.6
+    sensitivity: 52.8
+    specificity: 92.0
+    auc: 81.9
+    split: single_80_20_split
+
+  CN_vs_MCI:
+    accuracy: 59.0
+    sensitivity: 53.6
+    specificity: 63.6
+    auc: 63.6
+    split: single_80_20_split
+
+notes:
+  verified_from_report:
+    - "Input is 3D sMRI aligned to 12 templates via affine registration."
+    - "Siamese encoder has 8 convolution layers with shared weights."
+    - "Two template views are processed simultaneously."
+    - "SSL uses contrastive cosine similarity loss."
+    - "WML uses an InfoGAN-based module to extract demographic confounders."
+    - "MIM uses a CLUB estimator to minimize mutual information between Fc and Fm."
+    - "Binary classifier."
+    - "Single 80/20 stratified split."
+    - "100 epochs."
+
+  reproduction_note:
+    - "The original paper uses train-on-ADNI-1 and test-on-ADNI-2/3 cross-dataset evaluation."
+    - "Due to the absence of the ADNI-1/2/3 partition, the reproduction uses a stratified 80/20 split as an approximation."
+    - "The reproduced results are therefore not directly comparable to the original paper's reported numbers."
+
+  to_verify:
+    - "batch size"
+    - "optimizer"
+    - "learning rate"
+    - "weight decay"
+    - "loss function"
+    - "random seed"
