@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DHANet Configuration
+# Paper: "A Novel Dynamic Neural Network for Heterogeneity-Aware Structural
+#         Brain Network Exploration and Alzheimer's Disease Diagnosis"
+# ─────────────────────────────────────────────────────────────────────────────
+
+model:
+  name: DHANet
+  backbone: DynamicConvMixer3D     # 3D DRConv-based feature extractor
+  modules:
+    - HP                           # Dynamic Hierarchical Prototype Learning
+    - JDE                          # Joint Dynamic Edge Correlation
+    - GCN                          # 2-layer Graph Convolutional Network
+  channels: 64
+  depth: 4
+  node_dim: 128
+  num_nodes: 16
+  patch_size: 4
+  experts: 4                       # DRConv expert filters
+  graph_shape: [4, 5, 4]
+  num_classes: 2
+
+data:
+  modalities: [mwp1]               # sMRI only
+  image_folder: mwp1
+  input_shape: [64, 80, 64]        # D x H x W
+  csv_label_col: Label
+  tasks:
+    - AD_CN
+    - AD_MCI
+    - MCI_CN
+
+training:
+  epochs: 100
+  cross_validation: 5              # 5-fold stratified CV
+  batch_size: 2
+  optimizer: Adam
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-3
+  loss_function: FocalLoss + L_node + L_edge
+  loss_weights:
+    gamma_node: 1.0
+    gamma_edge: 0.8
+    focal_gamma: 2.0
+  random_seed: 42
+  num_workers: 0
+  device: cuda
+
+results:
+  AD_CN:
+    ACC: 88.4
+    SEN: 77.6
+    SPE: 93.2
+    AUC: 94.8
+    F1:  80.3
+    PRE: 84.7
+    folds_completed: 5
+  AD_MCI:
+    ACC: 75.5
+    SEN: 53.8
+    SPE: 86.9
+    AUC: 81.3
+    F1:  59.7
+    PRE: 69.1
+    folds_completed: 5
+  MCI_CN:
+    ACC: 55.7
+    SEN: 8.4
+    SPE: 95.9
+    AUC: 64.0
+    F1:  10.1
+    PRE: 12.7
+    folds_completed: 5
+    note: "Very low SEN (8.4%) — model defaults to CN; focal loss or class reweighting recommended"
+
+environment:
+  cluster: USC CARC (Discovery)
+  gpu: Tesla P100-PCIE-16GB
+  code_path: /scratch1/xinruish/data_AD/DHANet-reproduce/
