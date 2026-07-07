@@ -36,6 +36,7 @@ tasks:
 
 input:
   image_type: 3D
+  input_shape: [96, 112, 96]
   modalities:
     - gray_matter_sMRI
     - white_matter_sMRI
@@ -56,15 +57,16 @@ model:
 training:
   epochs: 40
   cross_validation: 10
-  batch_size: 4          # 论文原始为16，受限于P100 16GB显存调整为4
+  batch_size: 4
+  batch_size_note: "Original paper used batch size 16; adjusted to 4 due to P100 16GB GPU memory limitation."
   optimizer: Adam
   learning_rate: 0.001
   weight_decay: 0.001
   loss_function: CrossEntropyLoss
   label_smoothing: 0.2
-  random_seed: 42
   warmup_epochs: 10
-  input_shape: [96, 112, 96]
+  random_seed: 42
+  
 
 evaluation:
   metrics:
