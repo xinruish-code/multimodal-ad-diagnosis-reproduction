@@ -47,24 +47,50 @@ training:
 
 results:
   AD_CN:
-    ACC: null
-    SEN: null
-    SPE: null
-    AUC: null
-    folds_completed: pending
+    ACC: 86.9
+    SEN: 75.1
+    SPE: 92.2
+    AUC: 90.9
+    F1:  78.1
+    PRE: 81.5
+    std:
+      ACC: 2.6
+      SEN: 2.9
+      SPE: 3.0
+      AUC: 0.5
+      F1:  3.9
+      PRE: 6.0
+    folds_completed: 5
   AD_MCI:
-    ACC: null
-    SEN: null
-    SPE: null
-    AUC: null
-    folds_completed: pending
+    ACC: 73.1
+    SEN: 49.9
+    SPE: 85.3
+    AUC: 78.6
+    F1:  55.7
+    PRE: 64.1
+    std:
+      ACC: 3.2
+      SEN: 9.9
+      SPE: 3.2
+      AUC: 2.7
+      F1:  7.2
+      PRE: 5.3
+    folds_completed: 5
   MCI_CN:
-    ACC: null
-    SEN: null
-    SPE: null
-    AUC: null
-    folds_completed: pending
-  note: "Results pending — job currently running on CARC (job IDs: 10001333, 10001334, 10001335)"
+    ACC: 63.3
+    SEN: 55.6
+    SPE: 69.9
+    AUC: 65.8
+    F1:  58.2
+    PRE: 61.7
+    std:
+      ACC: 2.4
+      SEN: 4.8
+      SPE: 7.8
+      AUC: 2.6
+      F1:  1.5
+      PRE: 4.2
+    folds_completed: 5
 
 environment:
   cluster: USC CARC (Discovery)
