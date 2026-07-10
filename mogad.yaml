@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MOGAD Configuration
+# Paper: "Multi-organ Guided Diagnosis of Mild Cognitive Impairment via
+#         Hierarchical Attention and Knowledge Distillation"
+# ─────────────────────────────────────────────────────────────────────────────
+
+model:
+  name: MOGAD
+  architecture: Teacher-Student
+  modules:
+    - TeacherNet                   # multi-organ guided teacher network
+    - StudentNet                   # student network via knowledge distillation
+    - HFA                          # Hierarchical Feature Aggregation
+    - LC                           # Label Consistency module
+  patch_size: 8
+  embed_dim: 32
+  dropout: 0.0
+  temperature: 0.1
+  num_classes: 2
+
+data:
+  modalities: [pet, mwp1, wm]      # brain PET + GM (aux1) + WM (aux2)
+  brain_pet_folder: pet
+  aux1_folder: mwp1                # GM/MRI (adapted from heart PET branch)
+  aux2_folder: wm                  # WM (adapted from gut PET branch)
+  input_shape: [64, 80, 64]        # D x H x W
+  csv_label_col: Label
+  tasks:
+    - AD_CN
+    - AD_MCI
+    - MCI_CN
+
+training:
+  pretrain_epochs: 5               # teacher pre-training phase
+  teacher_epochs: 10               # teacher fine-tuning phase
+  student_epochs: 10               # student distillation phase
+  cross_validation: 5              # 5-fold stratified CV
+  batch_size: 2
+  drop_last: true                  # drop last batch to avoid BatchNorm error
+  optimizer: Adam
+  learning_rate: 5.0e-5
+  weight_decay: 1.0e-3
+  loss_weights:
+    alpha: 1.0                     # teacher classification loss weight
+    gamma: 0.5                     # distillation loss weight
+    hfa_weight: 0.1                # HFA loss weight
+    lc_weight: 0.1                 # label consistency loss weight
+    student_ce_weight: 1.0         # student CE loss weight
+    kd_weight: 0.5                 # knowledge distillation weight
+  random_seed: 42
+  num_workers: 0
+  device: cuda
+
+results:
+  AD_CN:
+    ACC: 80.9
+    SEN: 72.5
+    SPE: 84.6
+    AUC: 87.1
+    F1:  68.2
+    PRE: 71.6
+    std:
+      ACC: 3.1
+      SEN: 21.1
+      SPE: 8.2
+      AUC: 1.9
+      F1:  11.5
+      PRE: 11.1
+    folds_completed: 5
+  AD_MCI:
+    ACC: 66.9
+    SEN: 27.9
+    SPE: 87.4
+    AUC: 72.6
+    F1:  28.8
+    PRE: 49.1
+    std:
+      ACC: 3.0
+      SEN: 27.6
+      SPE: 16.0
+      AUC: 3.0
+      F1:  23.2
+      PRE: 26.5
+    folds_completed: 5
+    note: "Low SEN (27.9%) — model struggles to detect MCI"
+  MCI_CN:
+    ACC: 61.4
+    SEN: 63.7
+    SPE: 59.5
+    AUC: 66.3
+    F1:  59.8
+    PRE: 57.9
+    std:
+      ACC: 2.5
+      SEN: 12.7
+      SPE: 12.8
+      AUC: 3.4
+      F1:  4.3
+      PRE: 3.7
+    folds_completed: 5
+
+environment:
+  cluster: USC CARC (Discovery)
+  gpu: Tesla P100-PCIE-16GB
+  code_path: /scratch1/xinruish/data_AD/MOGAD-reproduce/
