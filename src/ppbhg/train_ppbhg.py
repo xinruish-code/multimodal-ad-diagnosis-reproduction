@@ -11,8 +11,15 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from mogad.data import MOGADDataset, collate, read_manifest
-from mogad.model import MOGADStudent, MOGADTeacher, hfa_loss, hkd_loss, label_consistency_loss
+from ppbhg.data import PPBHGDataset, collate, read_manifest
+from ppbhg.model import (
+    PPBHGStudent,
+    PPBHGTeacher,
+    group_distribution_distillation,
+    response_kd_loss,
+    sample_contrastive_distillation,
+    stage1_loss,
+)
 
 
 def parse_shape(value):
@@ -42,7 +49,7 @@ def metrics(y_true, prob):
     return result
 
 
-def run_pretrain_epoch(teacher, loader, optimizer, device, debug_shapes=False):
+def run_teacher_pretrain(teacher, loader, optimizer, device, debug_shapes=False):
     train = optimizer is not None
     teacher.train(train)
     total = 0.0
@@ -52,10 +59,10 @@ def run_pretrain_epoch(teacher, loader, optimizer, device, debug_shapes=False):
         brain = batch["brain_pet"].to(device)
         target = batch["target"].to(device)
         with torch.set_grad_enabled(train):
-            features, final = teacher.brain(brain)
-            logits = teacher.brain_head(final)
+            _, brain_vec = teacher.brain(brain)
+            logits = teacher.bs_head(brain_vec)
             if debug_once:
-                print("pretrain_brain:", brain.shape, "features:", [f.shape for f in features], "logits:", logits.shape)
+                print("pretrain_brain:", brain.shape, "brain_vec:", brain_vec.shape, "logits:", logits.shape)
                 debug_once = False
             loss = F.cross_entropy(logits, target)
             if train:
@@ -67,27 +74,21 @@ def run_pretrain_epoch(teacher, loader, optimizer, device, debug_shapes=False):
     return {"loss": total / len(loader.dataset)}
 
 
-def run_teacher_epoch(teacher, loader, optimizer, device, args, debug_shapes=False):
+def run_teacher_stage(teacher, loader, optimizer, device, args, debug_shapes=False):
     train = optimizer is not None
     teacher.train(train)
     total = 0.0
     debug_once = debug_shapes
-    iterator = tqdm(loader, leave=False, desc="teacher" if train else "teacher_eval")
+    iterator = tqdm(loader, leave=False, desc="stage1" if train else "stage1_eval")
     for batch in iterator:
         brain = batch["brain_pet"].to(device)
-        aux1 = batch["aux1"].to(device)
-        aux2 = batch["aux2"].to(device)
+        heart = batch["heart"].to(device)
+        gut = batch["gut"].to(device)
         target = batch["target"].to(device)
         with torch.set_grad_enabled(train):
-            out = teacher(brain, aux1, aux2, debug_shapes=debug_once)
+            out = teacher(brain, heart, gut, debug_shapes=debug_once)
             debug_once = False
-            with torch.no_grad():
-                pseudo = out["brain_logits"].argmax(dim=1)
-                conf = torch.softmax(out["brain_logits"], dim=1).max(dim=1).values
-                keep = conf >= conf.median()
-            pseudo_loss = F.cross_entropy(out["aux1_logits"][keep], pseudo[keep]) + F.cross_entropy(out["aux2_logits"][keep], pseudo[keep])
-            ce = F.cross_entropy(out["logits"], target)
-            loss = args.alpha * ce + args.gamma * pseudo_loss + args.hfa_weight * hfa_loss(out, args.temperature) + args.lc_weight * label_consistency_loss(out, target, args.temperature)
+            loss = stage1_loss(out, target, args.lambda1, args.lambda2, args.lambda3, args.contrast_temperature)
             if train:
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
@@ -101,7 +102,7 @@ def run_teacher_epoch(teacher, loader, optimizer, device, args, debug_shapes=Fal
 
 def eval_teacher(teacher, loader, device):
 
-    """Evaluate teacher model on a dataloader and return full metrics."""
+    """Evaluate teacher model and return full metrics."""
 
     teacher.eval()
 
@@ -111,15 +112,15 @@ def eval_teacher(teacher, loader, device):
 
         for batch in loader:
 
-            brain = batch["brain_pet"].to(device)
+            brain  = batch["brain_pet"].to(device)
 
-            aux1  = batch["aux1"].to(device)
+            heart  = batch["heart"].to(device)
 
-            aux2  = batch["aux2"].to(device)
+            gut    = batch["gut"].to(device)
 
             target = batch["target"].to(device)
 
-            out = teacher(brain, aux1, aux2)
+            out = teacher(brain, heart, gut)
 
             prob = torch.softmax(out["logits"], dim=1).cpu().numpy()
 
@@ -135,27 +136,30 @@ def eval_teacher(teacher, loader, device):
 
 
 
-def run_student_epoch(teacher, student, loader, optimizer, device, args, collect_outputs=False, debug_shapes=False):
+def run_student_stage(teacher, student, loader, optimizer, device, args, collect_outputs=False, debug_shapes=False):
     train = optimizer is not None
     teacher.eval()
     student.train(train)
-    all_y, all_prob, all_id, all_feat = [], [], [], []
     total = 0.0
+    all_y, all_prob, all_id, all_feat = [], [], [], []
     debug_once = debug_shapes
-    iterator = tqdm(loader, leave=False, desc="student" if train else "eval")
+    iterator = tqdm(loader, leave=False, desc="stage2" if train else "eval")
     for batch in iterator:
         brain = batch["brain_pet"].to(device)
-        aux1 = batch["aux1"].to(device)
-        aux2 = batch["aux2"].to(device)
+        heart = batch["heart"].to(device)
+        gut = batch["gut"].to(device)
+        student_image = batch["student_image"].to(device)
         target = batch["target"].to(device)
         with torch.no_grad():
-            teacher_out = teacher(brain, aux1, aux2)
+            teacher_out = teacher(brain, heart, gut)
         with torch.set_grad_enabled(train):
-            student_out = student(brain, debug_shapes=debug_once)
+            student_out = student(student_image, debug_shapes=debug_once)
             debug_once = False
-            ce = F.cross_entropy(student_out["logits"], target)
-            kd = hkd_loss(student_out, teacher_out, student, args.temperature)
-            loss = args.student_ce_weight * ce + args.kd_weight * kd
+            cls = F.cross_entropy(student_out["logits"], target)
+            scd = sample_contrastive_distillation(teacher_out["f_bhg"], student_out["feature"], args.contrast_temperature)
+            gdd = group_distribution_distillation(teacher_out["f_bhg"], student_out["feature"], target)
+            rkd = response_kd_loss(teacher_out["logits"], student_out["logits"], args.kd_temperature)
+            loss = cls + args.lambda4 * scd + args.lambda5 * gdd + args.lambda6 * rkd
             if train:
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
@@ -164,9 +168,9 @@ def run_student_epoch(teacher, student, loader, optimizer, device, args, collect
         all_prob.append(prob)
         all_y.append(target.detach().cpu().numpy())
         if collect_outputs:
-            all_feat.append(student_out["final"].detach().cpu().numpy())
+            all_feat.append(student_out["feature"].detach().cpu().numpy())
             all_id.extend(batch["id"])
-        total += float(loss.item()) * brain.size(0)
+        total += float(loss.item()) * student_image.size(0)
         iterator.set_postfix(loss=float(loss.item()))
     y = np.concatenate(all_y)
     prob = np.concatenate(all_prob)
@@ -185,32 +189,38 @@ def run_student_epoch(teacher, student, loader, optimizer, device, args, collect
 
 
 def train_fold(args, frame, train_idx, val_idx, fold, label_to_idx):
-    train_ds = MOGADDataset(frame.iloc[train_idx], args.input_shape, augment=True)
-    val_ds = MOGADDataset(frame.iloc[val_idx], args.input_shape, augment=False)
+    train_ds = PPBHGDataset(frame.iloc[train_idx], args.input_shape, args.student_modality, augment=True)
+    val_ds = PPBHGDataset(frame.iloc[val_idx], args.input_shape, args.student_modality, augment=False)
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, collate_fn=collate, drop_last=True)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, collate_fn=collate)
     device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
-    teacher = MOGADTeacher(len(label_to_idx), args.patch_size, args.embed_dim, args.dropout).to(device)
-    student = MOGADStudent(len(label_to_idx), args.patch_size, args.embed_dim, args.dropout).to(device)
-    opt_pre = torch.optim.AdamW(list(teacher.brain.parameters()) + list(teacher.brain_head.parameters()), lr=args.lr, weight_decay=args.weight_decay)
-    opt_teacher = torch.optim.AdamW(teacher.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    opt_student = torch.optim.AdamW(student.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    in_channels = 2 if args.student_modality == "pet_mri" else 1
+    teacher = PPBHGTeacher(len(label_to_idx), args.base_channels, args.latent_channels, args.heads, args.dropout).to(device)
+    student = PPBHGStudent(len(label_to_idx), in_channels, args.base_channels, args.latent_channels, args.dropout).to(device)
+    opt_pre = torch.optim.SGD(
+        list(teacher.brain.parameters()) + list(teacher.bs_head.parameters()),
+        lr=args.lr,
+        momentum=0.9,
+        weight_decay=args.weight_decay,
+    )
+    opt_teacher = torch.optim.SGD(teacher.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    opt_student = torch.optim.SGD(student.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     out_dir = Path(args.output_dir) / args.task / f"fold_{fold:02d}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(1, args.pretrain_epochs + 1):
-        stats = run_pretrain_epoch(teacher, train_loader, opt_pre, device, args.debug_shapes and epoch == 1)
+        stats = run_teacher_pretrain(teacher, train_loader, opt_pre, device, args.debug_shapes and epoch == 1)
         print(json.dumps({"phase": "pretrain", "epoch": epoch, "train": stats}, ensure_ascii=False))
 
     for epoch in range(1, args.teacher_epochs + 1):
-        stats = run_teacher_epoch(teacher, train_loader, opt_teacher, device, args, args.debug_shapes and epoch == 1)
-        print(json.dumps({"phase": "teacher", "epoch": epoch, "train": stats}, ensure_ascii=False))
+        stats = run_teacher_stage(teacher, train_loader, opt_teacher, device, args, args.debug_shapes and epoch == 1)
+        print(json.dumps({"phase": "stage1_teacher", "epoch": epoch, "train": stats}, ensure_ascii=False))
 
     best = {"auc": -1.0}
     for epoch in range(1, args.student_epochs + 1):
-        train_stats, _ = run_student_epoch(teacher, student, train_loader, opt_student, device, args, debug_shapes=args.debug_shapes and epoch == 1)
-        val_stats, val_outputs = run_student_epoch(teacher, student, val_loader, None, device, args, collect_outputs=True)
-        print(json.dumps({"phase": "student", "epoch": epoch, "train": train_stats, "val": val_stats}, ensure_ascii=False))
+        train_stats, _ = run_student_stage(teacher, student, train_loader, opt_student, device, args, debug_shapes=args.debug_shapes and epoch == 1)
+        val_stats, val_outputs = run_student_stage(teacher, student, val_loader, None, device, args, collect_outputs=True)
+        print(json.dumps({"phase": "stage2_student", "epoch": epoch, "train": train_stats, "val": val_stats}, ensure_ascii=False))
         score = val_stats.get("auc", val_stats["acc"])
         if score > best.get("auc", -1.0):
             best = val_stats
@@ -222,13 +232,15 @@ def train_fold(args, frame, train_idx, val_idx, fold, label_to_idx):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Reproduce MOGAD-Net with local brain-only ADNI-style data adaptation.")
+    parser = argparse.ArgumentParser(description="Reproduce Positional Prompts-Enhanced Brain-Heart-Gut interactions with local ADNI-style data.")
     parser.add_argument("--data-root", default=r"D:\AD\心睿\ADNI-amyloid-smri-pet")
     parser.add_argument("--brain-pet-folder", default="pet")
-    parser.add_argument("--aux1-folder", default="mwp1", help="Original heart PET branch adapted to GM/MRI in local data.")
-    parser.add_argument("--aux2-folder", default="wm", help="Original gut PET branch adapted to WM in local data.")
+    parser.add_argument("--heart-folder", default="mwp1", help="Original heart PET branch adapted to GM/sMRI in local data.")
+    parser.add_argument("--gut-folder", default="wm", help="Original gut PET branch adapted to WM in local data.")
+    parser.add_argument("--mri-folder", default="mwp1")
+    parser.add_argument("--student-modality", default="pet", choices=["pet", "mri", "pet_mri"])
     parser.add_argument("--task", default="MCI_CN", choices=["AD_CN", "MCI_CN", "AD_MCI", "CN_MCI_AD"])
-    parser.add_argument("--output-dir", default="mogad_runs")
+    parser.add_argument("--output-dir", default="ppbhg_runs")
     parser.add_argument("--input-shape", type=parse_shape, default=(64, 80, 64))
     parser.add_argument("--pretrain-epochs", type=int, default=5)
     parser.add_argument("--teacher-epochs", type=int, default=10)
@@ -236,17 +248,19 @@ def main():
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--single-split", action="store_true")
     parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--patch-size", type=int, default=8)
-    parser.add_argument("--embed-dim", type=int, default=32)
+    parser.add_argument("--base-channels", type=int, default=16)
+    parser.add_argument("--latent-channels", type=int, default=64)
+    parser.add_argument("--heads", type=int, default=4)
     parser.add_argument("--dropout", type=float, default=0.0)
-    parser.add_argument("--temperature", type=float, default=0.1)
-    parser.add_argument("--alpha", type=float, default=1.0)
-    parser.add_argument("--gamma", type=float, default=0.5)
-    parser.add_argument("--hfa-weight", type=float, default=0.1)
-    parser.add_argument("--lc-weight", type=float, default=0.1)
-    parser.add_argument("--student-ce-weight", type=float, default=1.0)
-    parser.add_argument("--kd-weight", type=float, default=0.5)
-    parser.add_argument("--lr", type=float, default=5e-5)
+    parser.add_argument("--contrast-temperature", type=float, default=0.1)
+    parser.add_argument("--kd-temperature", type=float, default=2.0)
+    parser.add_argument("--lambda1", type=float, default=0.8)
+    parser.add_argument("--lambda2", type=float, default=1.2)
+    parser.add_argument("--lambda3", type=float, default=0.3)
+    parser.add_argument("--lambda4", type=float, default=0.5)
+    parser.add_argument("--lambda5", type=float, default=0.3)
+    parser.add_argument("--lambda6", type=float, default=0.3)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-3)
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--workers", type=int, default=0)
@@ -257,7 +271,7 @@ def main():
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    frame, label_to_idx = read_manifest(args.data_root, args.task, args.brain_pet_folder, args.aux1_folder, args.aux2_folder)
+    frame, label_to_idx = read_manifest(args.data_root, args.task, args.brain_pet_folder, args.heart_folder, args.gut_folder, args.mri_folder)
     if args.max_samples is not None and args.max_samples < len(frame):
         per_class = max(1, args.max_samples // frame["target"].nunique())
         pieces = [group.sample(min(len(group), per_class), random_state=args.seed) for _, group in frame.groupby("target")]
@@ -287,3 +301,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
