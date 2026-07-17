@@ -1,0 +1,8 @@
+﻿metric,mean,std
+ACC,53.9,2.3
+SEN,14.8,25.3
+SPE,87.2,25.4
+AUC,58.4,5.5
+F1,14.2,20.4
+PRE,46.8,42.1
+note,Low SEN — model struggles to detect MCI,
